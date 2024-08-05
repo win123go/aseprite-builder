@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release Aseprite
 
 on:
   push:
@@ -12,33 +12,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+
       - name: Set up environment
         run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
-          choco install ninja --no-progress
+          # 设置你的环境，安装依赖等
+          echo "Setting up environment"
+
       - name: Build Aseprite
         run: |
-          mkdir build
-          cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-          ninja aseprite
-      - name: Archive build
-        uses: actions/upload-artifact@v2
-        with:
-          name: aseprite
-          path: build/bin/aseprite.exe
+          # 编写你的构建命令，例如：
+          echo "Building Aseprite"
+          # 例如：./build-aseprite.sh
 
-  release:
-    runs-on: windows-latest
-    needs: build-windows
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: aseprite
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: build/bin/aseprite.exe
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build/aseprite.zip # 构建产物路径
+          asset_name: aseprite.zip
+          asset_content_type: application/zip
