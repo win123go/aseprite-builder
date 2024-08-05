@@ -37,12 +37,18 @@ jobs:
         run: |
           # 设置你的环境，安装依赖等
           echo "Setting up environment"
+          # 如果需要安装额外的软件，例如choco，可以在这里添加
+          # choco install -y make
 
       - name: Build Aseprite
         run: |
-          # 编写你的构建命令，例如：
+          # 确保这个脚本路径正确并生成 D:\aseprite.zip
           echo "Building Aseprite"
-          # 例如：./build-aseprite.sh
+          ./build-aseprite.sh -o D:\aseprite.zip
+
+      - name: List files in D盘根目录
+        run: |
+          dir D:\
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -50,6 +56,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./build/aseprite.zip # 构建产物路径
+          asset_path: D:\aseprite.zip
           asset_name: aseprite.zip
           asset_content_type: application/zip
