@@ -21,9 +21,9 @@ jobs:
         id: aseprite-link
         uses: a1393323447/fetch-release@main
         with:
-            group: aseprite
-            repo: aseprite
-            match: Aseprite-.*?-Source.zip
+          group: aseprite
+          repo: aseprite
+          match: Aseprite-.*?-Source.zip
 
   create-release:
     name: Create Release
@@ -54,21 +54,20 @@ jobs:
       - name: Set up environment
         run: |
           echo "Setting up environment"
-          # 安装需要的工具和依赖，例如choco
-          choco install -y ninja
+          choco install -y ninja cmake
 
       - name: Fetch Skia release link
         id: skia-link
         uses: a1393323447/fetch-release@main
         with:
-            group: aseprite
-            repo: skia
-            match: Skia-${{ runner.os }}-Release-x64(-libstdc\+\+)?.zip
+          group: aseprite
+          repo: skia
+          match: Skia-Windows-Release-x64(-libstdc\+\+)?.zip
 
       - name: Download Skia
         run: |
-          curl -o Skia-${{ runner.os }}-Release-x64.zip -L ${{ steps.skia-link.outputs.download-link }}
-          unzip Skia-${{ runner.os }}-Release-x64.zip -d skia
+          curl -o Skia-Windows-Release-x64.zip -L ${{ steps.skia-link.outputs.download-link }}
+          unzip Skia-Windows-Release-x64.zip -d skia
 
       - name: Download Aseprite release
         run: |
@@ -76,16 +75,16 @@ jobs:
           unzip Aseprite-source.zip -d aseprite
           mkdir -p aseprite/build
 
-      - name: Set architecture for the produced binary (Windows)
+      - name: Set architecture for the produced binary
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setting Visual Studio build environment variables and paths (Windows)
+      - name: Setting Visual Studio build environment variables and paths
         uses: seanmiddleditch/gha-setup-vsdevenv@master
 
-      - name: Run CMake (Windows)
+      - name: Run CMake
         working-directory: aseprite/build
         shell: cmd
-        run: cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCMAKE_IGNORE_PATH='C:/ProgramData/chocolatey/bin/;C:/Strawberry/c/bin/' -DLAF_BACKEND=skia -DSKIA_DIR=../../skia -DSKIA_LIBRARY_DIR=../../skia/out/Release-x64 -G Ninja ..
+        run: cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCMAKE_IGNORE_PATH="C:/ProgramData/chocolatey/bin/;C:/Strawberry/c/bin/" -DLAF_BACKEND=skia -DSKIA_DIR=../../skia -DSKIA_LIBRARY_DIR=../../skia/out/Release-x64 -G Ninja ..
 
       - name: Run Ninja
         working-directory: aseprite/build
@@ -96,18 +95,18 @@ jobs:
         shell: bash
         run: rm -f gen modp_b64_gen gen.exe gen.exe.manifest modp_b64_gen.exe modp_b64_gen.exe.manifest
 
-      - name: (Windows) Make portable zip
+      - name: Make portable zip
         working-directory: aseprite/build/bin
-        run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
+        run: echo "# This file is here so Aseprite behaves as a portable program" > aseprite.ini
 
       - name: Create release
         working-directory: aseprite/build/bin
-        run: 7z -tzip a D:\Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
+        run: 7z -tzip a D:\Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip *
 
       - name: Upload release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: D:\Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip
-          asset_name: Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip
+          file: D:\Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip
+          asset_name: Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip
           tag: ${{ needs.create-release.outputs.release-tag }}
