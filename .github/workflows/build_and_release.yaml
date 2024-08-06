@@ -1,61 +1,105 @@
-name: Build and Release Aseprite
+name: Build and release Aseprite
 
 on:
   push:
-    tags:
-      - 'v1.3.7'
-  workflow_dispatch:
+    branches:
+      - main
+    paths:
+      - 'BuildLog.md'
+env:
+  BUILD_TYPE: Release
 
 jobs:
-  create-release:
+  fetch-aseprite-info:
+    name: Fetch deps info
     runs-on: windows-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      download-link: ${{ steps.aseprite-link.outputs.download-link }}
+      release-tag: ${{ steps.aseprite-link.outputs.release-tag }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fetch Aseprite release link
+        id: aseprite-link
+        uses: win123go/aseprite-builder@main
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+            group: aseprite
+            repo: aseprite
+            match: Aseprite-.*?-Source.zip
 
-  build-windows:
-    needs: create-release
+  create-release:
+    name: Create Release
     runs-on: windows-latest
+    needs: fetch-aseprite-info
+    permissions:
+      contents: write
+    outputs:
+      download-link: ${{ needs.fetch-aseprite-info.outputs.download-link }}
+      release-tag: ${{ needs.fetch-aseprite-info.outputs.release-tag }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up environment
-        run: |
-          # 设置你的环境，安装依赖等
-          echo "Setting up environment"
-          # 如果需要安装额外的软件，例如choco，可以在这里添加
-          # choco install -y make
-
-      - name: Build Aseprite
-        run: |
-          # 确保这个脚本路径正确并生成 D:\aseprite.zip
-          echo "Building Aseprite"
-          ./build-aseprite.sh -o D:\aseprite.zip
-
-      - name: List files in D盘根目录
-        run: |
-          dir D:\
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v2
+      - uses: ncipollo/release-action@v1
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: D:\aseprite.zip
-          asset_name: aseprite.zip
-          asset_content_type: application/zip
+          tag: ${{ needs.fetch-aseprite-info.outputs.release-tag }}
+          body: Aseprite-${{ needs.fetch-aseprite-info.outputs.release-tag }}
+          skipIfReleaseExists: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-aseprite:
+    name: Build Aseprite
+    needs: create-release
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.os }}
+    strategy:
+        matrix:
+          os: [ windows-latest ]
+        fail-fast: false
+    steps:
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: seanmiddleditch/gha-setup-ninja@master
+    
+      with:
+            group: aseprite
+            repo: skia
+            match: Skia-${{ runner.os }}-Release-x64(-libstdc\+\+)?.zip
+      - name: Download Skia
+        run: |
+          curl -o Skia-${{ runner.os }}-Release-x64.zip -L ${{ steps.skia-link.outputs.download-link }}
+          unzip Skia-${{ runner.os }}-Release-x64.zip -d skia
+      - name: Download Aseprite release
+        run: |
+          curl -o Aseprite-source.zip -L ${{ needs.create-release.outputs.download-link }}
+          unzip Aseprite-source.zip -d aseprite
+          mkdir -p aseprite/build
+      - name: Set architecture for the produced binary (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setting Visual Studio build environment variables and paths (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: seanmiddleditch/gha-setup-vsdevenv@master
+      - name: Run CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: aseprite/build
+        shell: cmd
+        run: cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCMAKE_IGNORE_PATH='C:/ProgramData/chocolatey/bin/;C:/Strawberry/c/bin/' -DLAF_BACKEND=skia -DSKIA_DIR=../../skia -DSKIA_LIBRARY_DIR=../../skia/out/Release-x64 -G Ninja ..
+      
+      - name: Run Ninja
+        working-directory: aseprite/build
+        run: ninja aseprite
+      - name: Clean up build
+        working-directory: aseprite/build/bin
+        shell: bash
+        run: rm -f gen modp_b64_gen gen.exe gen.exe.manifest modp_b64_gen.exe modp_b64_gen.exe.manifest
+      - name: (Windows) Make portable zip
+        working-directory: aseprite/build/bin
+        run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
+      - name: Create release
+        working-directory: aseprite/build/bin
+        run: 7z -tzip a Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
+      - name: Upload release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: aseprite/build/bin/Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip
+          asset_name: Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip
+          tag: ${{ needs.create-release.outputs.release-tag }}
